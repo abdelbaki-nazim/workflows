@@ -1,0 +1,9 @@
+config:
+  pf:awsAccessKey: AKIAVVZPCLMDKMYCYB67
+  pf:awsSecretKey:
+    secure: AAABAHlMlTC97ZAlxH14F5pwXd1zD3ysfIo+fED/xNUZTIXPjFeFmpCSyNaeVZA7ihUHQghtYjnnFLjUVkqyJGfCNNvffgQi
+  pf:awsRegion: us-east-1
+  pf:createS3: "true"
+  pf:createRDS: "false"
+  pf:createEKS: "false"
+  pf:s3BucketName: oiu

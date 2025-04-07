@@ -1,0 +1,87 @@
+name: Deploy Pulumi Stack
+
+on:
+  workflow_dispatch:
+    inputs:
+      userId:
+        description: "User ID"
+        required: true
+      createS3:
+        description: "Create S3 Bucket"
+        required: true
+      createRDS:
+        description: "Create RDS"
+        required: true
+      createEKS:
+        description: "Create EKS"
+        required: true
+      s3BucketName:
+        description: "S3 Bucket Name"
+        required: false
+      dbName:
+        description: "Database Name"
+        required: false
+      dbUsername:
+        description: "Database Username"
+        required: false
+      dbPassword:
+        description: "Database Password"
+        required: false
+      clusterName:
+        description: "EKS Cluster Name"
+        required: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+
+      - name: Install Pulumi CLI
+        run: npm install -g @pulumi/pulumi
+
+      - name: Install dependencies
+        working-directory: ./pulumi
+        run: npm ci
+
+      - name: Deploy Pulumi stack
+        working-directory: ./pulumi
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          STACK_NAME: ${{ github.event.inputs.userId }}-resources
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          USER_ID: ${{ github.event.inputs.userId }}
+          CREATE_S3: ${{ github.event.inputs.createS3 }}
+          CREATE_RDS: ${{ github.event.inputs.createRDS }}
+          CREATE_EKS: ${{ github.event.inputs.createEKS }}
+          S3_BUCKET_NAME: ${{ github.event.inputs.s3BucketName }}
+          DB_NAME: ${{ github.event.inputs.dbName }}
+          DB_USERNAME: ${{ github.event.inputs.dbUsername }}
+          DB_PASSWORD: ${{ github.event.inputs.dbPassword }}
+          CLUSTER_NAME: ${{ github.event.inputs.clusterName }}
+        run: |
+          pulumi stack init $STACK_NAME || echo "Stack already exists"
+          pulumi config set awsAccessKey $AWS_ACCESS_KEY_ID
+          pulumi config set awsSecretKey $AWS_SECRET_ACCESS_KEY --secret
+          pulumi config set awsRegion $AWS_REGION
+          pulumi config set createS3 $CREATE_S3
+          pulumi config set createRDS $CREATE_RDS
+          pulumi config set createEKS $CREATE_EKS
+          pulumi config set s3BucketName $S3_BUCKET_NAME
+          pulumi config set clusterName $CLUSTER_NAME    # <-- ADDED PULUMI CONFIG SET (Will be empty if not provided)
+
+          if [ -n "$DB_NAME" ]; then
+            DATABASES_JSON=$(printf '[{"dbName":"%s","username":"%s","password":"%s"}]' "$DB_NAME" "$DB_USERNAME" "$DB_PASSWORD")
+          else
+            DATABASES_JSON='[]'
+          fi
+          pulumi config set pf:databases "$DATABASES_JSON"
+          pulumi login
+          pulumi up --skip-preview --yes

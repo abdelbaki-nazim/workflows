@@ -1,0 +1,13 @@
+{
+    "name": "pf",
+    "main": "index.ts",
+    "devDependencies": {
+        "@types/node": "^18",
+        "typescript": "^5.0.0"
+    },
+    "dependencies": {
+        "@pulumi/aws": "^6.75.0",
+        "@pulumi/eks": "^3.8.1",
+        "@pulumi/pulumi": "^3.113.0"
+    }
+}
