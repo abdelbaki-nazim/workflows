@@ -42,7 +42,7 @@ export let rdsInstancePort: pulumi.Output<number> | undefined;
 if (config.getBoolean("createRDS") === true) {
   console.log("RDS creation requested. Proceeding...");
 
-  const databasesSecretJson = config.requireSecret("pf:databases");
+  const databasesSecretJson = config.requireSecret("databases");
 
   const dbDetails = databasesSecretJson.apply((jsonString) => {
     const databases = JSON.parse(jsonString);
@@ -148,7 +148,7 @@ if (config.getBoolean("createRDS") === true) {
     console.log(` -> Instance Class: ${dbInstanceClass}`);
   } else {
     console.log(
-      "No database details provided in 'pf:databases' config. Skipping RDS creation."
+      "No database details provided in 'databases' config. Skipping RDS creation."
     );
   }
 } else {
