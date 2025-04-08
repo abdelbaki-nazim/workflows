@@ -167,18 +167,6 @@ if (config.getBoolean("createEKS") === true) {
 
   const vpcId = "vpc-0e4c18d71fea58af1";
 
-  const publicSubnetsPromise: Promise<aws.ec2.GetSubnetsResult> =
-    aws.ec2.getSubnets({
-      filters: [
-        { name: "vpc-id", values: [vpcId] },
-        { name: "tag:SubnetType", values: ["public"] },
-      ],
-    });
-
-  const publicSubnetIdsOutput: pulumi.Output<string[]> = pulumi
-    .output(publicSubnetsPromise)
-    .apply((subnetsResult: aws.ec2.GetSubnetsResult) => subnetsResult.ids);
-
   try {
     const cluster = new eks.Cluster(
       `eksCluster`,
@@ -186,7 +174,11 @@ if (config.getBoolean("createEKS") === true) {
         name: eksClusterName,
         version: eksK8sVersion,
         vpcId: vpcId,
-        publicSubnetIds: publicSubnetIdsOutput,
+        publicSubnetIds: [
+          "subnet-0e6e3f6c7ee38aa7b",
+          "subnet-02f60cf6daf7187d9",
+          "subnet-0416b66f4749be8ba",
+        ],
         nodeGroupOptions: {
           instanceType: eksInstanceType,
           desiredCapacity: eksDesiredCapacity,
