@@ -84,4 +84,4 @@ jobs:
           fi
           pulumi config set pf:databases "$DATABASES_JSON"
           pulumi login
-          pulumi up --skip-preview --yes
+          pulumi up --skip-preview --yes -v=9 --logtostderr
