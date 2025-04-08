@@ -202,7 +202,7 @@ if (config.getBoolean("createEKS") === true) {
     console.error(
       `Error during EKS Cluster ${eksClusterName} creation: ${error}`
     );
-    throw error; // Re-throw error to fail the Pulumi update if needed
+    throw error;
   }
 } else {
   console.log("EKS creation not requested.");

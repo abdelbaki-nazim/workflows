@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
             Accept: "application/vnd.github.v3+json",
           },
         });
+
         if (!initialRes.ok) {
           throw new Error(`Failed to fetch run ${runId}: ${initialRes.status}`);
         }
@@ -70,8 +71,8 @@ export async function GET(req: NextRequest) {
         return;
       }
 
-      const pollInterval = 3000;
-      const maxAttempts = 120;
+      const pollInterval = 4000;
+      const maxAttempts = 580;
       let attempts = 0;
 
       const poll = async () => {
