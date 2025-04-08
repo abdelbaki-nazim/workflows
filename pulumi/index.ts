@@ -42,20 +42,28 @@ export let rdsInstancePort: pulumi.Output<number> | undefined;
 if (config.getBoolean("createRDS") === true) {
   console.log("RDS creation requested. Proceeding...");
 
-  const databasesRaw = config.require("databases");
-  const databases = JSON.parse(databasesRaw);
+  const databasesSecretJson = config.requireSecret("pf:databases");
 
-  if (databases.length > 0) {
-    const dbInfo = databases[0];
-    const dbName = dbInfo.dbName;
-    const dbUsername = dbInfo.username;
-    const dbPassword = config.requireSecret("dbPassword");
+  const dbDetails = databasesSecretJson.apply((jsonString) => {
+    const databases = JSON.parse(jsonString);
+    if (databases.length > 0) {
+      return {
+        dbName: databases[0].dbName as string,
+        dbUsername: databases[0].username as string,
+        dbPassword: databases[0].password as pulumi.Output<string>,
+        isValid: true,
+      };
+    }
+    return { isValid: false };
+  });
+
+  if (dbDetails.isValid) {
     const dbInstanceClass = "db.t3.micro";
     const dbEngine = "mysql";
     const dbEngineVersion = "8.0";
     const dbAllocatedStorage = 20;
     const dbMultiAz = false;
-    const dbPubliclyAccessible = false;
+    const dbPubliclyAccessible = true;
     const dbParameterFamily = "mysql8.0";
 
     const hardcodedPrivateSubnetIds = [
@@ -96,34 +104,39 @@ if (config.getBoolean("createRDS") === true) {
 
     const dbInstanceIdentifier = `${pulumi.getStack()}-db-instance`;
 
-    const rdsInstance = new aws.rds.Instance(
-      dbInstanceIdentifier,
-      {
-        identifier: dbInstanceIdentifier,
-        engine: dbEngine,
-        engineVersion: dbEngineVersion,
-        instanceClass: dbInstanceClass,
-        allocatedStorage: dbAllocatedStorage,
-        dbName: dbName,
-        username: dbUsername,
-        password: dbPassword,
-        dbSubnetGroupName: dbSubnetGroup.name,
-        parameterGroupName: dbParameterGroup.name,
-        vpcSecurityGroupIds: hardcodedVpcSecurityGroupIds,
-        multiAz: dbMultiAz,
-        publiclyAccessible: dbPubliclyAccessible,
-        skipFinalSnapshot: true,
-        applyImmediately: true,
-        tags: {
-          Name: dbInstanceIdentifier,
-          Environment: pulumi.getStack(),
-        },
-      },
-      {
-        provider: awsProvider,
-        dependsOn: [dbSubnetGroup, dbParameterGroup],
-      }
-    );
+    const rdsInstance = pulumi
+      .all([dbDetails.dbName, dbDetails.dbUsername, dbDetails.dbPassword])
+      .apply(
+        ([name, user, pass]) =>
+          new aws.rds.Instance(
+            dbInstanceIdentifier,
+            {
+              identifier: dbInstanceIdentifier,
+              engine: dbEngine,
+              engineVersion: dbEngineVersion,
+              instanceClass: dbInstanceClass,
+              allocatedStorage: dbAllocatedStorage,
+              dbName: name,
+              username: user,
+              password: pass,
+              dbSubnetGroupName: dbSubnetGroup.name,
+              parameterGroupName: dbParameterGroup.name,
+              vpcSecurityGroupIds: hardcodedVpcSecurityGroupIds,
+              multiAz: dbMultiAz,
+              publiclyAccessible: dbPubliclyAccessible,
+              skipFinalSnapshot: true,
+              applyImmediately: true,
+              tags: {
+                Name: dbInstanceIdentifier,
+                Environment: pulumi.getStack(),
+              },
+            },
+            {
+              provider: awsProvider,
+              dependsOn: [dbSubnetGroup, dbParameterGroup],
+            }
+          )
+      );
 
     rdsInstanceEndpoint = rdsInstance.endpoint.apply(
       (endpoint) => endpoint.split(":")[0]
@@ -131,8 +144,6 @@ if (config.getBoolean("createRDS") === true) {
     rdsInstancePort = rdsInstance.port;
 
     console.log(`RDS Instance ${dbInstanceIdentifier} creation initiated.`);
-    console.log(` -> DB Name: ${dbName}`);
-    console.log(` -> Username: ${dbUsername}`);
     console.log(` -> Engine: ${dbEngine} ${dbEngineVersion}`);
     console.log(` -> Instance Class: ${dbInstanceClass}`);
   } else {
