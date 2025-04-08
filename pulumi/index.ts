@@ -165,7 +165,7 @@ if (config.getBoolean("createEKS") === true) {
   const eksMaxSize = 3;
   const eksK8sVersion = "1.31";
 
-  const vpcId = "vpc-04a0161c3cefe5035";
+  const vpcId = "vpc-0e4c18d71fea58af1";
 
   const publicSubnetsPromise: Promise<aws.ec2.GetSubnetsResult> =
     aws.ec2.getSubnets({
