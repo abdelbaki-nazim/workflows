@@ -36,62 +36,112 @@ if (config.getBoolean("createS3") === true) {
   s3BucketOutput = bucket.bucket;
 }
 
+export let rdsInstanceEndpoint: pulumi.Output<string> | undefined;
+export let rdsInstancePort: pulumi.Output<number> | undefined;
+
 if (config.getBoolean("createRDS") === true) {
-  const rdsInstanceIdentifier = "database-pulumi";
-  const databasesRaw = config.get("databases") || "[]";
+  console.log("RDS creation requested. Proceeding...");
+
+  const databasesRaw = config.require("pf:databases");
   const databases = JSON.parse(databasesRaw);
 
   if (databases.length > 0) {
-    const rdsCluster = new aws.rds.Cluster(
-      `rds-cluster-${rdsInstanceIdentifier}`,
+    const dbInfo = databases[0];
+    const dbName = dbInfo.dbName;
+    const dbUsername = dbInfo.username;
+    const dbPassword = config.requireSecret("dbPassword");
+    const dbInstanceClass = "db.t3.micro";
+    const dbEngine = "mysql";
+    const dbEngineVersion = "8.0";
+    const dbAllocatedStorage = 20;
+    const dbMultiAz = false;
+    const dbPubliclyAccessible = false;
+    const dbParameterFamily = "mysql8.0";
+
+    const hardcodedPrivateSubnetIds = [
+      "subnet-0607d56e3d621b404",
+      "subnet-02f60cf6daf7187d9",
+    ];
+    const hardcodedVpcSecurityGroupIds = ["sg-032569d223f9915df"];
+
+    const dbSubnetGroup = new aws.rds.SubnetGroup(
+      `${pulumi.getStack()}-dbsubnetgroup`,
       {
-        clusterIdentifier: rdsInstanceIdentifier,
-        engine: "aurora-mysql",
-        engineVersion: "8.0",
-        databaseName: databases[0].dbName,
-        masterUsername: databases[0].username,
-        masterPassword: databases[0].password,
-        skipFinalSnapshot: true,
-        applyImmediately: true,
+        name: `${pulumi.getStack()}-dbsubnetgroup`,
+        subnetIds: hardcodedPrivateSubnetIds,
+        tags: {
+          Name: `${pulumi.getStack()}-dbsubnetgroup`,
+          Environment: pulumi.getStack(),
+        },
       },
       { provider: awsProvider }
     );
 
-    rdsEndpoint = rdsCluster.endpoint;
-
-    databases.forEach((db: any) => {
-      const dbName = db.dbName;
-      const dbUsername = db.username;
-      const dbPassword = db.password;
-
-      new aws.rds.ClusterInstance(
-        `rds-instance-${dbName}`,
-        {
-          identifier: `${rdsInstanceIdentifier}-${dbName}`,
-          clusterIdentifier: rdsCluster.clusterIdentifier,
-          instanceClass: "db.t4g.micro",
-          engine: "aurora-mysql",
-          engineVersion: "8.0",
-          publiclyAccessible: false,
-          applyImmediately: true,
+    const dbParameterGroup = new aws.rds.ParameterGroup(
+      `${pulumi.getStack()}-dbparamgroup`,
+      {
+        name: `${pulumi.getStack()}-dbparamgroup`,
+        family: dbParameterFamily,
+        parameters: [
+          { name: "character_set_server", value: "utf8mb4" },
+          { name: "character_set_client", value: "utf8mb4" },
+        ],
+        tags: {
+          Name: `${pulumi.getStack()}-dbparamgroup`,
+          Environment: pulumi.getStack(),
         },
-        { provider: awsProvider }
-      );
+      },
+      { provider: awsProvider }
+    );
 
-      new aws.rds.ClusterParameterGroup(
-        `param-group-${dbName}`,
-        {
-          family: "aurora-mysql8.0",
-          parameters: [{ name: "character_set_server", value: "utf8mb4" }],
+    const dbInstanceIdentifier = `${pulumi.getStack()}-db-instance`;
+
+    const rdsInstance = new aws.rds.Instance(
+      dbInstanceIdentifier,
+      {
+        identifier: dbInstanceIdentifier,
+        engine: dbEngine,
+        engineVersion: dbEngineVersion,
+        instanceClass: dbInstanceClass,
+        allocatedStorage: dbAllocatedStorage,
+        dbName: dbName,
+        username: dbUsername,
+        password: dbPassword,
+        dbSubnetGroupName: dbSubnetGroup.name,
+        parameterGroupName: dbParameterGroup.name,
+        vpcSecurityGroupIds: hardcodedVpcSecurityGroupIds,
+        multiAz: dbMultiAz,
+        publiclyAccessible: dbPubliclyAccessible,
+        skipFinalSnapshot: true,
+        applyImmediately: true,
+        tags: {
+          Name: dbInstanceIdentifier,
+          Environment: pulumi.getStack(),
         },
-        { provider: awsProvider }
-      );
+      },
+      {
+        provider: awsProvider,
+        dependsOn: [dbSubnetGroup, dbParameterGroup],
+      }
+    );
 
-      console.log(`Database ${dbName} created for user ${dbUsername}`);
-    });
+    rdsInstanceEndpoint = rdsInstance.endpoint.apply(
+      (endpoint) => endpoint.split(":")[0]
+    );
+    rdsInstancePort = rdsInstance.port;
+
+    console.log(`RDS Instance ${dbInstanceIdentifier} creation initiated.`);
+    console.log(` -> DB Name: ${dbName}`);
+    console.log(` -> Username: ${dbUsername}`);
+    console.log(` -> Engine: ${dbEngine} ${dbEngineVersion}`);
+    console.log(` -> Instance Class: ${dbInstanceClass}`);
   } else {
-    console.log("No databases specified for RDS creation.");
+    console.log(
+      "No database details provided in 'pf:databases' config. Skipping RDS creation."
+    );
   }
+} else {
+  console.log("RDS creation not requested.");
 }
 
 if (config.getBoolean("createEKS") === true) {
