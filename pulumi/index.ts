@@ -42,7 +42,7 @@ export let rdsInstancePort: pulumi.Output<number> | undefined;
 if (config.getBoolean("createRDS") === true) {
   console.log("RDS creation requested. Proceeding...");
 
-  const databasesRaw = config.require("pf:databases");
+  const databasesRaw = config.require("databases");
   const databases = JSON.parse(databasesRaw);
 
   if (databases.length > 0) {
