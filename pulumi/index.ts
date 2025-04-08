@@ -18,10 +18,7 @@ const awsProvider = new aws.Provider("aws-provider", {
 });
 
 // Define variables to hold resource outputs.
-let s3BucketOutput: pulumi.Output<string> | undefined;
-let rdsEndpoint: pulumi.Output<string> | undefined;
-let eksClusterOutput: pulumi.Output<string> | undefined;
-
+export let s3BucketOutput: pulumi.Output<string> | undefined;
 // S3 Bucket Creation
 if (config.getBoolean("createS3") === true) {
   const s3BucketName = config.get("s3BucketName") || "default-s3-bucket";
@@ -38,7 +35,7 @@ if (config.getBoolean("createS3") === true) {
 
 export let rdsInstanceEndpoint: pulumi.Output<string> | undefined;
 export let rdsInstancePort: pulumi.Output<number> | undefined;
-
+// RDS Creation
 if (config.getBoolean("createRDS") === true) {
   console.log("RDS creation requested. Proceeding...");
 
@@ -155,50 +152,66 @@ if (config.getBoolean("createRDS") === true) {
   console.log("RDS creation not requested.");
 }
 
+export let eksClusterOutput: pulumi.Output<string> | undefined;
+// EKS Creation
 if (config.getBoolean("createEKS") === true) {
-  const eksClusterName = "fabulous-electro-gopher";
+  console.log("EKS creation requested. Proceeding...");
+
+  const eksClusterName =
+    config.get("clusterName") || `${pulumi.getStack()}-eks-cluster`;
   const eksInstanceType = "t3.medium";
   const eksDesiredCapacity = 2;
   const eksMinSize = 1;
   const eksMaxSize = 3;
-  const eksK8sVersion = config.get("eksK8sVersion") || "1.31";
+  const eksK8sVersion = "1.31";
 
-  const nodeInstanceProfile = new aws.iam.InstanceProfile(
-    "eksNodeInstanceProfile",
-    {
-      role: "AmazonEKSAutoNodeRole",
-    }
-  );
+  const vpcId = "vpc-04a0161c3cefe5035";
 
-  const cluster = new eks.Cluster(
-    "eksCluster",
-    {
-      name: eksClusterName,
-      version: eksK8sVersion,
-      vpcId: "vpc-04a0161c3cefe5035",
-      publicSubnetIds: [
-        "subnet-0a6f0e8d65f1fd095",
-        "subnet-03309b9ea4ced012b",
-        "subnet-0607d56e3d621b404",
-        "subnet-0e6e3f6c7ee38aa7b",
-        "subnet-02f60cf6daf7187d9",
-        "subnet-0416b66f4749be8ba",
+  const publicSubnetsPromise: Promise<aws.ec2.GetSubnetsResult> =
+    aws.ec2.getSubnets({
+      filters: [
+        { name: "vpc-id", values: [vpcId] },
+        { name: "tag:SubnetType", values: ["public"] },
       ],
-      nodeGroupOptions: {
-        instanceProfileName: nodeInstanceProfile.name,
-        instanceType: eksInstanceType,
-        desiredCapacity: eksDesiredCapacity,
-        minSize: eksMinSize,
-        maxSize: eksMaxSize,
-      },
-      providerCredentialOpts: {
-        profileName: config.get("awsProfile") || "default",
-      },
-    },
-    { provider: awsProvider }
-  );
+    });
 
-  eksClusterOutput = cluster.eksCluster.name;
+  const publicSubnetIdsOutput: pulumi.Output<string[]> = pulumi
+    .output(publicSubnetsPromise)
+    .apply((subnetsResult: aws.ec2.GetSubnetsResult) => subnetsResult.ids);
+
+  try {
+    const cluster = new eks.Cluster(
+      `${pulumi.getStack()}-eksCluster`,
+      {
+        name: eksClusterName,
+        version: eksK8sVersion,
+        vpcId: vpcId,
+        publicSubnetIds: publicSubnetIdsOutput,
+        nodeGroupOptions: {
+          instanceType: eksInstanceType,
+          desiredCapacity: eksDesiredCapacity,
+          minSize: eksMinSize,
+          maxSize: eksMaxSize,
+        },
+        tags: {
+          Name: eksClusterName,
+          Environment: pulumi.getStack(),
+        },
+      },
+      {
+        provider: awsProvider,
+        customTimeouts: { create: "30m", update: "30m", delete: "20m" },
+      }
+    );
+
+    eksClusterOutput = cluster.eksCluster.name;
+    console.log(`EKS Cluster ${eksClusterName} creation initiated.`);
+  } catch (error) {
+    console.error(
+      `Error during EKS Cluster ${eksClusterName} creation: ${error}`
+    );
+    throw error; // Re-throw error to fail the Pulumi update if needed
+  }
+} else {
+  console.log("EKS creation not requested.");
 }
-
-export { s3BucketOutput, rdsEndpoint, eksClusterOutput };
