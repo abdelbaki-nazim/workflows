@@ -181,7 +181,7 @@ if (config.getBoolean("createEKS") === true) {
 
   try {
     const cluster = new eks.Cluster(
-      `${pulumi.getStack()}-eksCluster`,
+      `eksCluster`,
       {
         name: eksClusterName,
         version: eksK8sVersion,
